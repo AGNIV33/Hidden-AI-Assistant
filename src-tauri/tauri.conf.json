@@ -93,7 +93,8 @@
       "nsis": {
         "installMode": "both",
         "startMenuFolder": "Peek AI",
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
       }
     },
     "copyright": "© 2026 Agniv Sarkar",
