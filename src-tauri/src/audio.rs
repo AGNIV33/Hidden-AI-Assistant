@@ -102,9 +102,19 @@ fn run_source(
         all.extend(w[44..].chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])));
         let _ = app.emit("listen-level", json!({ "speaker": label, "secs": all.len() / RATE }));
     };
+    let mut peak = 0f32;
+    let mut last_level = Instant::now();
     while !stop.load(Ordering::Relaxed) {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(samples) => {
+                // Sound meter for the screen (so you can see the app really hears the call).
+                let rms = (samples.iter().map(|x| x * x).sum::<f32>() / samples.len().max(1) as f32).sqrt();
+                peak = peak.max(rms);
+                if last_level.elapsed() >= Duration::from_millis(250) {
+                    let _ = app.emit("listen-meter", json!({ "speaker": label, "level": (peak * 8.0).min(1.0) }));
+                    peak = 0.0;
+                    last_level = Instant::now();
+                }
                 for w in chunker.push(&samples) {
                     take(w, &mut all);
                 }
@@ -323,7 +333,7 @@ impl Chunker {
 
     fn frame(&mut self, f: &[f32]) -> Option<Vec<u8>> {
         let rms = (f.iter().map(|s| s * s).sum::<f32>() / f.len() as f32).sqrt();
-        let speech = rms > (self.noise * 3.0).max(0.01);
+        let speech = rms > (self.noise * 2.5).max(0.004); // quiet calls still count
         if !speech {
             self.noise = if self.noise == 0.0 { rms } else { 0.98 * self.noise + 0.02 * rms };
         }
@@ -356,7 +366,9 @@ impl Chunker {
             self.quiet += 1;
         }
         let frames = self.cur.len() / FRAME;
-        if self.quiet >= END_SILENCE || frames >= MAX_FRAMES || (frames >= SOFT_MAX && !speech) {
+        // Pieces under ~1.5 s wait for a longer pause, so a sentence is not sent word by word.
+        let need = if frames < 75 { END_SILENCE * 2 } else { END_SILENCE };
+        if self.quiet >= need || frames >= MAX_FRAMES || (frames >= SOFT_MAX && !speech) {
             self.in_speech = false;
             let out = if self.speech >= MIN_SPEECH { Some(wav(&self.cur)) } else { None };
             self.cur.clear();

@@ -26,7 +26,7 @@ function ctx(query: string): string {
   const prof = store.get<{ on?: boolean; text?: string }>("profile", {});
   const me = prof.on !== false && prof.text?.trim() ? `### About me (the user)\n${prof.text.trim().slice(0, 6000)}` : "";
   const files = buildContext(S.cur().files, query, Math.max(1000, budget - me.length));
-  return [me, files].filter(Boolean).join("\n\n");
+  return [me, recentHeard(), files].filter(Boolean).join("\n\n");
 }
 const modelLabel = (r: AskResp) => `${r.provider} · ${r.model}`;
 
@@ -110,7 +110,8 @@ function renderChat() {
   const msgs = S.cur().messages;
   if (!msgs.length) { chat.appendChild(emptyHint()); return; }
   for (const m of msgs) {
-    if (m.role === "user") chat.appendChild(questionEl(m));
+    if (m.heard) chat.appendChild(heardEl(m));
+    else if (m.role === "user") chat.appendChild(questionEl(m));
     else { const a = el("div", "a"); fillAnswer(a, m.content, m.label ?? ""); chat.appendChild(a); }
   }
   scrollDown();
@@ -137,7 +138,14 @@ function addPending(): HTMLElement {
   return e;
 }
 /** What we send the AI as chat history (screenshots become a short text note). */
-const historyForAI = () => S.cur().messages.map((m) => ({ role: m.role, content: m.shot ? `[screenshot] ${m.content}` : m.content }));
+const historyForAI = () =>
+  S.cur().messages.filter((m) => !m.heard).map((m) => ({ role: m.role, content: m.shot ? `[screenshot] ${m.content}` : m.content }));
+/** The last things heard in the meeting (sent as background with every question). */
+function recentHeard(): string {
+  const lines = S.cur().messages.filter((m) => m.heard).slice(-8).map((m) => `${m.heard === "me" ? "Me" : "Them"}: ${m.content}`);
+  const t = lines.join("\n").slice(-2500);
+  return t ? `### What was said in the meeting just now\n${t}` : "";
+}
 /** If the window is closed, make the bubble glow. */
 async function notifyIfHidden() {
   if (!(await getCurrentWindow().isVisible())) void emit("answer-ready");
@@ -360,8 +368,8 @@ function renderSessions() {
 }
 
 /* ---------- listening mode ----------
- * Manual (default): click mic = start, click again = stop -> what was heard goes into the question box.
- * Auto: keeps listening and answers questions by itself.
+ * Click the mic: what people say appears live in the chat (as "Them" / "Me" bubbles).
+ * Each bubble has "Answer this". Auto mode also answers questions by itself.
  */
 interface Heard { speaker: "them" | "me"; text: string }
 interface DetectResp { question: string | null; answer: string | null; provider: string; model: string }
@@ -369,7 +377,6 @@ const listenBtn = $("listenBtn"), live = $("live");
 type Phase = "off" | "on" | "finishing";
 let phase: Phase = "off";
 let heard: Heard[] = [];
-let recorded: Heard[] = [];
 let doneSources = 0;
 let lastQ = "";
 let detecting = false;
@@ -381,49 +388,110 @@ const listenCfg = () => ({ mic: false, language: "", mode: "manual", spoken: "au
 const answerLang = () => listenCfg().language || (listenCfg().toEnglish ? "English" : "");
 /** True when the text has letters that are not English (Bengali, Hindi...). */
 const notEnglish = (t: string) => /[^\p{Script=Latin}\P{L}]/u.test(t);
-let recStart = 0;
-let speechSecs = 0;
-let recTick: number | undefined;
 const isAuto = () => listenCfg().mode === "auto";
 const normQ = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
+/* Status strip: sound meter + state (the words themselves go into the chat). */
+const meter = { them: 0, me: 0 };
+let lastSound = 0;
+let listenStart = 0;
+let statusTick: number | undefined;
 function renderLive(status = "") {
   listenBtn.classList.toggle("rec", phase === "on");
   listenBtn.title = phase === "on" ? "Stop listening" : "Start listening";
   live.hidden = phase === "off";
   if (phase === "off") return;
   live.replaceChildren();
-  live.classList.toggle("rec-mode", !isAuto());
-  if (!isAuto()) {
-    // Mic-button mode: the text is made in one go when you stop, so show time and speech heard.
-    const t = Math.round((Date.now() - recStart) / 1000);
-    const mmss = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-    if (phase === "on") live.append(el("b", "", `● Recording ${mmss}`), speechSecs ? ` · ${speechSecs}s of speech heard` : " · waiting for speech…", el("br"), el("small", "", "Click the mic again to stop. The text appears right after."));
-    else live.append(el("i", "", status || "Turning speech into text…"));
-    live.scrollTop = live.scrollHeight;
-    return;
-  }
-  if (!heard.length) live.append("Listening… waiting for speech");
-  if (isAuto()) {
-    for (const h of heard.slice(-2)) live.append(el("b", "", h.speaker === "them" ? "Them: " : "Me: "), h.text, el("br"));
-  } else {
-    // Recording: show everything heard so far as one growing text.
-    const both = recorded.some((h) => h.speaker === "me") && recorded.some((h) => h.speaker === "them");
-    let lastSpeaker = "";
-    for (const h of recorded) {
-      if (both && h.speaker !== lastSpeaker) { if (lastSpeaker) live.append(el("br")); live.append(el("b", "", h.speaker === "them" ? "Them: " : "Me: ")); }
-      live.append(h.text + " ");
-      lastSpeaker = h.speaker;
-    }
-  }
-  if (phase === "finishing") live.append(el("br"), el("i", "", "Finishing the last sentence…"));
-  else if (status) live.append(el("i", "", status));
-  live.scrollTop = live.scrollHeight;
+  live.classList.remove("rec-mode");
+  if (phase === "finishing") { live.append(el("i", "", status || "Finishing the last sentence…")); return; }
+  const bar = (v: number) => { const b = el("span", "meter"); const f = el("span"); f.style.width = `${Math.round(v * 100)}%`; b.append(f); return b; };
+  live.append(el("b", "", "● Live"), " Them ", bar(meter.them));
+  if (listenCfg().mic) live.append(" Me ", bar(meter.me));
+  const quietFor = Date.now() - Math.max(lastSound, listenStart);
+  if (quietFor > 8000) live.append(el("br"), el("small", "", "No sound from your speakers. Is the meeting playing on your default speakers/headphones?"));
+  else if (status) live.append(" ", el("i", "", status));
 }
 function renderLiveMsg(msg: string) {
   live.hidden = false;
   live.replaceChildren(el("i", "", msg));
 }
+
+/* Live transcript bubbles in the chat. A bubble keeps growing while the same person talks. */
+let liveMsg: S.ChatMsg | null = null;
+let liveNode: HTMLElement | null = null;
+let liveAt = 0;
+let trQueue: Promise<void> = Promise.resolve();
+function heardEl(m: S.ChatMsg): HTMLElement {
+  const box = el("div", `heard ${m.heard}`);
+  const head = el("div", "who", m.heard === "me" ? "Me" : "Them");
+  const ans = el("button", "", "Answer this");
+  ans.title = "Ask the AI to answer what was said here";
+  ans.onclick = () => void answerHeard(m);
+  head.append(ans);
+  box.append(head, el("div", "txt", m.content));
+  return box;
+}
+function updateHeard() {
+  if (!liveMsg || !liveNode) return;
+  const t = liveNode.querySelector(".txt");
+  if (t) t.textContent = liveMsg.content;
+  scrollDown();
+}
+function addHeard(h: Heard) {
+  const now = Date.now();
+  const same = liveMsg && liveMsg.heard === h.speaker && now - liveAt < 8000 && S.cur().messages[S.cur().messages.length - 1] === liveMsg && liveMsg.content.length < 1200;
+  if (!same) {
+    liveMsg = { role: "user", content: "", heard: h.speaker };
+    S.cur().messages.push(liveMsg);
+    chat.querySelector(".empty")?.remove();
+    liveNode = heardEl(liveMsg);
+    chat.appendChild(liveNode);
+  }
+  const msg = liveMsg!;
+  const node = liveNode!;
+  liveAt = now;
+  // Show the words at once; swap in English when the conversion is back (in order).
+  const pieceStart = msg.content.length ? msg.content.length + 1 : 0;
+  msg.content = msg.content ? `${msg.content} ${h.text}` : h.text;
+  updateHeard();
+  S.save();
+  if (listenCfg().toEnglish && notEnglish(h.text) && config.answer.length) {
+    const original = h.text;
+    trQueue = trQueue.then(async () => {
+      try {
+        const en = (await withTimeout(invoke<string>("translate_text", { req: { text: original, slots: config.answer } }), 20_000)).trim();
+        if (!en) return;
+        const at = msg.content.indexOf(original, Math.max(0, pieceStart - 5));
+        if (at >= 0) msg.content = msg.content.slice(0, at) + en + msg.content.slice(at + original.length);
+        const t = node.querySelector(".txt");
+        if (t) t.textContent = msg.content;
+        S.save();
+        if (isAuto() && msg.heard === "them") { heard.push({ speaker: "them", text: en }); scheduleDetect(); }
+      } catch { /* keep the original words */ }
+    });
+  } else if (isAuto() && h.speaker === "them") {
+    heard.push({ speaker: "them", text: h.text });
+    scheduleDetect();
+  }
+  if (h.speaker === "me") heard.push(h);
+  if (heard.length > 30) heard.splice(0, heard.length - 30);
+}
+/** "Answer this": send what was heard as a question. */
+async function answerHeard(m: S.ChatMsg) {
+  if (busy) { toast("Wait for the current answer first (or press ■)."); return; }
+  if (!config.answer.length) { toast("Add an Answers model in Settings first."); openSettings(true); return; }
+  const q = m.content.trim();
+  if (!q) return;
+  const lang = answerLang();
+  const history = [...historyForAI(), { role: "user", content: `Someone in my meeting just said: "${q}"\nGive me what I should reply${lang ? `, in ${lang}` : ""}.` }];
+  await runAI(
+    { role: "user", content: q, auto: true },
+    "",
+    (streamId) => invoke<AskResp>("ask", { req: { messages: history, mode, slots: config.answer, context: ctx(q), streamId } }),
+    160_000,
+  );
+}
+
 async function startListening() {
   if (phase !== "off") return;
   if (isAuto() && !config.answer.length) { toast("Add an Answers model in Settings first."); openSettings(true); return; }
@@ -460,63 +528,46 @@ async function startListening() {
     }
   }
   try {
-    await invoke("start_listening", { stt: config.stt, mic: listenCfg().mic, spoken: listenCfg().spoken, whole: !isAuto() });
-    phase = "on"; heard = []; recorded = []; lastQ = ""; doneSources = 0;
-    recStart = Date.now(); speechSecs = 0;
-    clearInterval(recTick);
-    if (!isAuto()) recTick = window.setInterval(() => { if (phase === "on") renderLive(); }, 1000);
+    await invoke("start_listening", { stt: config.stt, mic: listenCfg().mic, spoken: listenCfg().spoken, whole: false });
+    phase = "on"; heard = []; lastQ = ""; doneSources = 0; liveMsg = null;
+    listenStart = Date.now(); lastSound = 0; meter.them = meter.me = 0;
+    clearInterval(statusTick);
+    statusTick = window.setInterval(() => { if (phase === "on") renderLive(); }, 1000);
     renderLive();
   } catch (e) { toast(String(e)); }
 }
 async function stopListening() {
   if (phase !== "on") return;
   clearTimeout(detTimer);
+  clearInterval(statusTick);
   phase = "finishing";
   renderLive();
-  clearInterval(recTick);
   try { await invoke("stop_listening"); } catch { /* ignore */ }
-  // Wait for the speech to be turned into text (the whole recording can take longer).
   clearTimeout(finishTimer);
-  finishTimer = window.setTimeout(() => void finishRecording(), isAuto() ? 15_000 : 180_000);
+  finishTimer = window.setTimeout(finishListening, 15_000);
 }
-async function finishRecording() {
+function finishListening() {
   if (phase !== "finishing") return;
   clearTimeout(finishTimer);
-  if (isAuto()) { phase = "off"; renderLive(); return; }
-  const both = recorded.some((h) => h.speaker === "me") && recorded.some((h) => h.speaker === "them");
-  let text = recorded.map((h) => (both ? `${h.speaker === "them" ? "Them" : "Me"}: ${h.text}` : h.text)).join(both ? "\n" : " ").trim();
-  if (!text) { phase = "off"; renderLive(); toast("Nothing was heard. Check the sound is playing on your default speakers/headphones.", "info"); return; }
-  // Bengali / Hindi heard? Turn it into English first (one quick AI call).
-  if (listenCfg().toEnglish && notEnglish(text) && config.answer.length) {
-    renderLive("Converting to English…");
-    try { text = (await withTimeout(invoke<string>("translate_text", { req: { text, slots: config.answer } }), 35_000)) || text; }
-    catch (e) { toast(`Could not convert to English, kept the original. ${e instanceof Error ? e.message : String(e)}`); }
-  }
   phase = "off";
+  liveMsg = null;
   renderLive();
-  input.value = input.value.trim() ? `${input.value.trim()}\n${text}` : text;
-  autoGrow();
-  openSettings(false); showSessions(false);
-  input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
-  toast("Recorded. Edit if needed, then press Enter.", "info");
+  S.save(true);
 }
 const toggleListening = () => void (phase === "on" ? stopListening() : startListening());
 
 function onHeard(h: Heard) {
   if (phase === "off") return;
-  heard.push(h);
-  recorded.push(h);
-  if (heard.length > 30) heard.shift();
-  renderLive();
-  if (phase === "on" && isAuto() && h.speaker === "them") {
-    clearTimeout(detTimer);
-    detTimer = window.setTimeout(() => void detect(), 500);
-  }
+  addHeard(h);
+}
+function scheduleDetect() {
+  if (phase !== "on" || !isAuto()) return;
+  clearTimeout(detTimer);
+  detTimer = window.setTimeout(() => void detect(), 500);
 }
 function onSourceDone() {
   doneSources++;
-  if (phase === "finishing" && doneSources >= (listenCfg().mic ? 2 : 1)) void finishRecording();
+  if (phase === "finishing" && doneSources >= (listenCfg().mic ? 2 : 1)) finishListening();
 }
 // Auto mode only: did "Them" just ask something for me? If yes, show the question + answer.
 async function detect() {
@@ -643,12 +694,16 @@ void listen("cycle-mode", () => {
 void listen<Heard>("transcript", (e) => onHeard(e.payload));
 void listen<string>("listen-error", (e) => {
   toast(String(e.payload));
-  if (String(e.payload).startsWith("Audio stopped")) { if (phase === "on") void stopListening(); else void finishRecording(); }
+  if (String(e.payload).startsWith("Audio stopped")) { if (phase === "on") void stopListening(); else finishListening(); }
 });
 void listen<string>("app-error", (e) => toast(String(e.payload)));
 void listen("toggle-listening", toggleListening);
 void listen<string>("listen-done", () => onSourceDone());
-void listen<{ speaker: string; secs: number }>("listen-level", (e) => { speechSecs = Math.max(speechSecs, e.payload.secs); if (phase === "on") renderLive(); });
+void listen<{ speaker: "them" | "me"; level: number }>("listen-meter", (e) => {
+  meter[e.payload.speaker === "me" ? "me" : "them"] = e.payload.level;
+  if (e.payload.level > 0.03) lastSound = Date.now();
+  if (phase === "on") renderLive();
+});
 void listen<string>("screenshot", (e) => void attachImage(e.payload));
 
 /* ---------- start ---------- */

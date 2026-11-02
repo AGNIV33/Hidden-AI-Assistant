@@ -72,10 +72,11 @@ For each box:
 - You can also **paste** (Ctrl+V) or **drop** an image.
 - The image waits above the box. Type your question and press **Enter**.
 
-### Listen to the call
-Click the **🎤 mic**:
-- **Mic button mode** (default): click to start, click again to stop. What was said goes into the question box. Check it, then press Enter.
-- **Auto mode**: keeps listening and answers questions by itself.
+### Listen to the call (live transcript)
+Click the **🎤 mic**. What people say appears **live in the chat** as "Them" bubbles. Click the mic again to stop.
+- Each bubble has an **Answer this** button. Click it to get a reply you can say.
+- A **sound meter** at the top shows the app is hearing the call.
+- **Auto mode** (Settings → Listening → Mode) also answers questions by itself.
 
 Listening options (Settings → Listening):
 - **People speak**: Auto (Hindi, Bengali, English), or one language. Picking one gives the best results.

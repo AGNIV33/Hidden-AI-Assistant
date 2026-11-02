@@ -378,7 +378,7 @@ export function buildSettings() {
   const wDir = el("input"); wDir.type = "text"; wDir.value = cfg.whisperDir; wDir.placeholder = "D:\\whisper";
   wDir.onchange = () => store.set("listen", { ...store.get("listen", cfg), whisperDir: wDir.value.trim() || "D:\\whisper" });
   const how = el("select");
-  for (const [v, t] of [["manual", "Click mic to start, click again to stop (question box)"], ["auto", "Keep listening and answer questions by itself"]]) {
+  for (const [v, t] of [["manual", "Live transcript (tap \u2018Answer this\u2019 on any line)"], ["auto", "Live transcript + answer questions by itself"]]) {
     const o = el("option", "", t); o.value = v; how.append(o);
   }
   how.value = cfg.mode === "auto" ? "auto" : "manual";
@@ -398,7 +398,7 @@ export function buildSettings() {
   box.append(
     el("h3", "", "Listening"),
     el("div", "hint", "Hears whatever plays on your default speakers or headphones. 'My mic' also hears you. Use headphones with it, or the other person may be heard twice."),
-    row("Mic button", how),
+    row("Mode", how),
     row("My mic", mic),
     row("People speak", spoken),
     el("div", "hint", "If a meeting is all in one language, pick it here. That gives the best results."),

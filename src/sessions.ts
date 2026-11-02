@@ -8,6 +8,7 @@ export interface ChatMsg {
   auto?: boolean; // question heard in a meeting
   shot?: boolean; // came from a screenshot / image
   thumb?: string; // small preview of that image (data URL)
+  heard?: "them" | "me"; // live transcript of the meeting
 }
 export interface CtxFile { id: string; name: string; text: string }
 export interface Session { id: string; name: string; created: number; messages: ChatMsg[]; files: CtxFile[] }

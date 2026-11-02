@@ -287,3 +287,13 @@ textarea.profile:focus { border-color: var(--accent); }
 #imgBar[hidden] { display: none; }
 #imgBar img { height: 44px; max-width: 90px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(127,127,127,.35); }
 #imgBar span { flex: 1; }
+
+/* live transcript bubbles */
+.heard { align-self: stretch; margin: 2px 0; padding: 6px 10px; border-radius: 10px; background: rgba(127,127,127,.10); border-left: 3px solid var(--accent); font-size: .95em; }
+.heard.me { border-left-color: rgba(127,127,127,.6); }
+.heard .who { display: flex; align-items: center; gap: 8px; font-size: .78em; font-weight: 600; opacity: .8; margin-bottom: 2px; }
+.heard .who button { margin-left: auto; font: inherit; font-weight: 500; padding: 1px 8px; border-radius: 8px; border: 1px solid rgba(127,127,127,.4); background: transparent; color: inherit; cursor: pointer; }
+.heard .who button:hover { border-color: var(--accent); color: var(--accent); }
+.heard .txt { white-space: pre-wrap; }
+#live .meter { display: inline-block; width: 60px; height: 6px; border-radius: 3px; background: rgba(127,127,127,.25); vertical-align: middle; overflow: hidden; }
+#live .meter span { display: block; height: 100%; background: var(--accent); transition: width .2s; }
