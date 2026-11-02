@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Peek AI",
+  "version": "1.0.0",
+  "identifier": "com.agniv.hiddenai",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "bubble",
+        "url": "bubble.html",
+        "title": "",
+        "width": 64,
+        "height": 64,
+        "x": 40,
+        "y": 240,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "contentProtected": true,
+        "focus": false,
+        "minWidth": 32,
+        "minHeight": 32
+      },
+      {
+        "label": "panel",
+        "url": "index.html",
+        "title": "Peek AI",
+        "width": 420,
+        "height": 620,
+        "minWidth": 340,
+        "minHeight": 420,
+        "x": 120,
+        "y": 120,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "contentProtected": true,
+        "visible": false
+      },
+      {
+        "label": "snip",
+        "url": "snip.html",
+        "title": "",
+        "width": 800,
+        "height": 600,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "contentProtected": true,
+        "visible": false,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "Agniv Sarkar",
+    "shortDescription": "Peek AI – your private AI helper, hidden from screen share",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "copyright": "© 2026 Agniv Sarkar",
+    "longDescription": "Peek AI is a small desktop assistant that stays invisible in screen sharing. Ask questions, read screenshots and listen to meetings with your own AI keys."
+  }
+}
