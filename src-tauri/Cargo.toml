@@ -17,7 +17,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 cpal = "0.15"
 tokio = { version = "1", features = ["time"] }
 keyring = { version = "3", features = ["windows-native"] }
-xcap = "0.9.8"
+xcap = { version = "0.9.8", features = ["wgc"] } # modern capture: videos are not black
 pdf-extract = "0.12.1"
 base64 = "0.23.1"
 tauri-plugin-autostart = "2.7.0"
