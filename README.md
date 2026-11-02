@@ -3,7 +3,7 @@
 A light, free AI assistant for Windows. It floats on your screen during meetings, and **its windows are hidden when you share your screen**.
 
 - Ask questions by typing, from a screenshot, or by listening to the call
-- Works with Hindi, Bengali and English, and can convert speech to English
+- Works with Hindi, Bengali and English or anyother languages and can convert speech to English
 - Use any AI you like (Groq, Google Gemini, NVIDIA, OpenAI, OpenRouter, …), with free options
 - Your API keys stay in Windows Credential Manager, never in files
 
