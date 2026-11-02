@@ -14,7 +14,11 @@ A light, free AI assistant for Windows. It floats on your screen during meetings
 ### Option A: You already have the installer file
 1. Double-click **`Peek AI_1.0.0_x64-setup.exe`**.
 2. If Windows shows a blue box ("Windows protected your PC"), click **More info → Run anyway**. It shows because the app is not signed, which is normal for free apps.
-3. Click **Next** until it finishes. No admin rights needed.
+3. Follow the steps, like any other software:
+   - **Install for:** "Only for me" (no admin needed) or "Anyone who uses this computer" (asks for admin).
+   - **Install location:** keep the default or click **Browse** to pick a folder (for example on D:).
+   - **Start Menu folder:** keep "Peek AI".
+   - Click **Install**, then **Finish**.
 4. Open **Peek AI** from the Start Menu.
 
 ### Option B: Build the installer yourself (from this code)

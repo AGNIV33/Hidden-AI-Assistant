@@ -91,7 +91,9 @@
         "silent": true
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "both",
+        "startMenuFolder": "Peek AI",
+        "installerIcon": "icons/icon.ico"
       }
     },
     "copyright": "© 2026 Agniv Sarkar",
